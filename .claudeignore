@@ -1,0 +1,42 @@
+# Dependencies
+scripts_syncro_uc7_php/vendor/
+Script_MessageZendesk_Admin/vendor/
+script_historique_admin/.venv/
+node_modules/
+
+# Caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Secrets
+.env
+*.env.local
+
+# Lock files
+composer.lock
+package-lock.json
+
+# Persistence state
+last_sync.txt
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# n8n workflow JSON (large, non pertinent pour l'analyse de code)
+Workflows_n8n/**/*.json
+
+# Git
+.git/

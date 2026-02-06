@@ -3,3 +3,6 @@
 last_sync.txt
 composer.lock
 *.log
+.claude/
+.claudeignore
+CLAUDE.md
