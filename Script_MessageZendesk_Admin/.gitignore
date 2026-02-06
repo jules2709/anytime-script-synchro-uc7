@@ -5,4 +5,4 @@ composer.lock
 *.log
 .claude/
 .claudeignore
-CLAUDE.md
+CLAUDE.md 
