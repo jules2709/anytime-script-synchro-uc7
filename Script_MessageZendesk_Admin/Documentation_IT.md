@@ -239,7 +239,7 @@ $container->set(MessageRepositoryInterface::class, new MariaDBMessageRepository(
 | Type | m_reply_uid | Logique |
 |------|-----------|---------|
 | Message client | NULL | Envoyé par le demandeur (requester_id) |
-| Réponse agent | 1 | Envoyé par quelqu'un d'autre (agent support) |
+| Réponse agent | external_id (ou 1 si pas trouvé) | Envoyé par quelqu'un d'autre (agent support) |
 
 ### Gestion des erreurs et cas limites
 

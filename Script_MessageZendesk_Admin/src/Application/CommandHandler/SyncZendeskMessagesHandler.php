@@ -78,7 +78,7 @@ class SyncZendeskMessagesHandler
                         }
                     }
                 }
-                usleep(100000); // Rate limit security
+                usleep(500000); // Rate limit security
             }
 
             if ($result['endOfStream']) {
