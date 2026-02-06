@@ -125,7 +125,8 @@ class SyncZendeskMessagesHandler
                                 date: $comment['created_at'],
                                 status: Utils::mapZendeskStatusToDb($ticket['status'] ?? 'new'),
                                 report: Utils::mapPriorityToReport($ticket['priority'] ?? 'normal'),
-                                done: $ticketDone
+                                done: $ticketDone,
+                                source: $ticketId
                             ),
                             'isAgent' => false,
                             'agentExternalId' => null
@@ -151,7 +152,8 @@ class SyncZendeskMessagesHandler
                                     status: Utils::mapZendeskStatusToDb($ticket['status'] ?? 'new'),
                                     report: Utils::mapPriorityToReport($ticket['priority'] ?? 'normal'),
                                     done: $ticketDone,
-                                    replyUid: $replyUid
+                                    replyUid: $replyUid,
+                                    source: $ticketId
                                 ),
                                 'isAgent' => !$msg['is_client'],
                                 'agentExternalId' => $agentExternalId
@@ -172,7 +174,8 @@ class SyncZendeskMessagesHandler
                                 report: $messagesToSave[$i]['message']->report,
                                 done: $messagesToSave[$i]['message']->done,
                                 replyUid: $messagesToSave[$i]['message']->replyUid,
-                                doneUid: $messagesToSave[$i]['agentExternalId']
+                                doneUid: $messagesToSave[$i]['agentExternalId'],
+                                source: $messagesToSave[$i]['message']->source
                             );
                             break;
                         }

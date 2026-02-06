@@ -14,7 +14,8 @@ class Message
         public readonly int $report,
         public readonly int $done,
         public readonly string|int|null $replyUid = null,
-        public readonly string|int|null $doneUid = null
+        public readonly string|int|null $doneUid = null,
+        public readonly string|int|null $source = null
     ) {
     }
 
@@ -36,6 +37,10 @@ class Message
 
         if ($this->doneUid !== null) {
             $data['m_done_uid'] = $this->doneUid;
+        }
+
+        if ($this->source !== null) {
+            $data['m_source'] = $this->source;
         }
 
         return $data;
