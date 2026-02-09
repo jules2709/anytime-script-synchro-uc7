@@ -1,0 +1,10 @@
+/vendor/
+.env
+.env.*
+!.env.example
+*.log
+last_sync.txt
+/.vscode/
+/.idea/
+.DS_Store
+Thumbs.db

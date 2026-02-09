@@ -1,0 +1,665 @@
+{
+  "name": "Store_solved_tickets",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "=0 0 0 */2 * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -928,
+        80
+      ],
+      "id": "1e532e75-5cb5-4a34-9587-3b54ec81f142",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "object",
+        "operation": "create",
+        "bucketName": "tickets_clos",
+        "objectName": "={{ $('Generate GCP object id').first().json.object_name }}",
+        "createData": {},
+        "createQuery": {},
+        "encryptionHeaders": {},
+        "requestOptions": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.googleCloudStorage",
+      "typeVersion": 1,
+      "position": [
+        1472,
+        80
+      ],
+      "id": "85b1be68-4c02-44a1-b4a8-3317cb77f837",
+      "name": "Create an object",
+      "retryOnFail": true,
+      "credentials": {
+        "googleCloudStorageOAuth2Api": {
+          "id": "6ou9Zk3kypL4Abck",
+          "name": "Google Cloud Storage account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://anytime-42666.zendesk.com/api/v2/tickets/{{ $('New solved tickets').item.json.id }}/comments",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "zendeskApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        80
+      ],
+      "id": "72a193d2-0701-4843-8b2c-7b994836a47f",
+      "name": "Get ticket messages",
+      "credentials": {
+        "zendeskApi": {
+          "id": "d9TzMxjRB1yc0Php",
+          "name": "Zendesk account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Exemple de JSON\n{\n  \"ticket_id\": \"32\",\n  \"motif de contact\": \"ouverture_compte\",\n  \"conversation\": [\n    {\n      \"role\": \"client\",\n      \"text\": \"J'ai un autre soucis\"\n    },\n    {\n      \"role\": \"agent\",\n      \"text\": \"Bonjour, comment puis-je vous aider ?\\n\\nVeuillez remplir le champ suivant pour faciliter votre prise en charge\"\n    },\n    {\n      \"role\": \"client\",\n      \"text\": \"Motif de contact: Paiement::Remboursement\"\n    },\n    {\n      \"role\": \"agent\",\n      \"text\": \"Merci ! Un agent va vous répondre\"\n    },\n    {\n      \"role\": \"agent\",\n      \"text\": \"solution, aurevoir\"\n    }\n  ]\n}",
+        "height": 528,
+        "width": 432
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1952,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "cb142138-0aff-4c21-8533-60f0cd069f5c",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "### Récupère les messages du ticket et le motif de contact",
+        "height": 240,
+        "width": 1184
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -592,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "e65d712c-ed6b-4074-b8ed-885640a9e2c7",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $('Get ticket messages').all();\n\nreturn items.map((item, index) => {\n  const allComments = item.json.comments || [];\n  const conversation = [];\n\n  // 1. EXTRACTION DU NOM DU CLIENT DEPUIS LE PREMIER MESSAGE\n  // On récupère le texte du premier commentaire (celui qu'on ignorait)\n  const headerText = allComments[0]?.plain_body || \"\";\n  \n  // On cherche \"Conversation with\" ou \"Conversation avec\" suivi du nom\n  const clientNameMatch = headerText.match(/(?:Conversation with|Conversation avec)\\s+(.*)/i);\n  const clientName = clientNameMatch ? clientNameMatch[1].trim() : null;\n\n  // Regex pour les messages du chat\n  const msgRegex = /\\(\\d{2}:\\d{2}:\\d{2}\\)\\s+(.*?):\\s+([\\s\\S]+?)(?=\\n*(?:\\(\\d{2}:\\d{2}:\\d{2}\\)|$))/g;\n\n  // 2. PARCOURS DES MESSAGES (on ignore toujours le header dans la boucle)\n  allComments.slice(1).forEach(commentObj => {\n    const fullText = commentObj.plain_body || \"\";\n    let match;\n\n    while ((match = msgRegex.exec(fullText)) !== null) {\n      const senderName = match[1].trim();\n      const text = match[2].trim();\n\n      // 3. LOGIQUE DE RÔLE INVERSÉE\n      // Si le nom du message correspond exactement au nom extrait du header -> client\n      // Sinon (si c'est Anytime ou un agent nommé) -> agent\n      let role = \"agent\";\n      \n      if (clientName && senderName.toLowerCase() === clientName.toLowerCase()) {\n        role = \"client\";\n      }\n\n      conversation.push({\n        role: role,\n        text: text\n      });\n    }\n  });\n\n  return {\n    json: { \n      client_identified: clientName, // Pratique pour déboguer\n      conversation \n    },\n    pairedItem: {\n      item: index\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        656,
+        80
+      ],
+      "id": "eddd45c5-b631-4421-b462-fe46ae3c969e",
+      "name": "Format conversation"
+    },
+    {
+      "parameters": {
+        "resource": "ticketField",
+        "operation": "getAll"
+      },
+      "type": "n8n-nodes-base.zendesk",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        80
+      ],
+      "id": "6bca0f69-dd87-4148-9a12-3501b025ea3a",
+      "name": "Get many ticket fields",
+      "credentials": {
+        "zendeskApi": {
+          "id": "d9TzMxjRB1yc0Php",
+          "name": "Zendesk account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. On récupère l'ID cible depuis le nœud d'options\n// On utilise .first() pour s'assurer de récupérer l'ID même s'il n'y a qu'un seul item en entrée de ce nœud\nconst targetFieldId = $('Get id \"motif de contact\"').first().json.id;\n\n// 2. On récupère tous les items (tickets) en entrée\nconst items = $('New solved tickets').all();\n\nreturn items.map((item, index) => {\n  const customFields = item.json.custom_fields || [];\n  console.log(customFields)\n\n  // 3. On cherche dans le tableau le champ dont l'ID correspond à notre cible\n  const motifField = customFields.find(f => f.id === targetFieldId);\n\n  return {\n    json: {\n      // On renvoie la valeur trouvée, ou null si le champ n'existe pas dans ce ticket\n      motif_de_contact: motifField ? motifField.value : null\n    },\n    // On conserve le lien avec l'item d'origine\n    pairedItem: {\n      item: index\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        432,
+        80
+      ],
+      "id": "3324138d-b4b5-4be7-af90-05db51666f3c",
+      "name": "Get Motif de contact"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "02e2933e-a561-4565-ac26-c18ff53d5529",
+              "name": "ticket_id",
+              "value": "={{ $('New solved tickets').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "54bd90ba-7d4f-41da-b5cc-f303d312b61e",
+              "name": "motif de contact",
+              "value": "={{ $('Get Motif de contact').item.json.motif_de_contact }}",
+              "type": "string"
+            },
+            {
+              "id": "d35a0cfa-f465-4ea9-a7a7-694a6d31920e",
+              "name": "conversation",
+              "value": "={{ $('RGPD Agent1').item.json.output.conversation }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1120,
+        80
+      ],
+      "id": "df561268-7da6-4089-82f8-f862e9a9ec0f",
+      "name": "Gather fields"
+    },
+    {
+      "parameters": {
+        "content": "### Envoie le JSON de la conversation sur un bucket GCP",
+        "height": 240,
+        "width": 544
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1104,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "8d488b22-4481-40b6-beb6-73094f09935d",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "gen-lang-client-0462375962",
+          "mode": "list",
+          "cachedResultName": "Anytime"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleVertex",
+      "typeVersion": 1,
+      "position": [
+        752,
+        240
+      ],
+      "id": "1075ea1b-0768-4dc2-abfb-dd29a287abc4",
+      "name": "Google Vertex Chat Model1",
+      "credentials": {
+        "googleApi": {
+          "id": "6vS8Owh7HtNYTqy5",
+          "name": "Google Service Account account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"conversation\": [\n    {\n      \"role\": \"client\",\n      \"text\": \"J'ai un autre soucis\"\n    }, \n    {\n      \"role\": \"agent\",\n      \"text\": \"Quel est votre soucis\"\n    }\n  ]\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        976,
+        240
+      ],
+      "id": "04e75ff8-0d6a-4dc9-82bd-2107e4bc8a1b",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Voici la conversation JSON à anonymiser. Applique les règles de protection des données définies dans ton système :\n\nInput JSON :\n{{ JSON.stringify($json.conversation, null, 2) }}\n\nInstructions complémentaires :\n- Si un nom est cité plusieurs fois, utilise toujours le même jeton.\n- Assure-toi que le JSON final soit syntaxiquement correct.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "### RÔLE\nTu es un Expert en Protection des Données (DPO) spécialisé dans l'anonymisation de flux textuels. Ton poste consiste à traiter des transcriptions de conversations entre des agents de support et des clients pour en retirer toute donnée à caractère personnel (DCP) avant stockage. \n\n### MISSION\nTon unique fonction est de transformer le texte contenu dans le JSON d'entrée en remplaçant les informations sensibles par des jetons génériques entre crochets. Tu dois préserver la structure JSON exacte et l'ensemble du  reste de la conversation\n\n### RÈGLES D'ANONYMISATION (Bonnes Pratiques)\nRemplace les entités suivantes par leurs labels respectifs :\n- **Noms/Prénoms** : `[Prénom]` ou `[Nom]`\n- **Coordonnées** : `[Email]`, `[Téléphone]`, `[Adresse]`\n- **Identifiants Bancaires** : `[IBAN]`, `[Numéro de Carte]`\n- **Données de Compte** : `[Numéro de commande]`, `[Identifiant Client]`, `[Mot de passe]`\n- **Localisation précise** : `[Ville]`, `[Code Postal]` (Sauf si l'information est capitale pour le contexte métier général).\n\n### DIRECTIVES DE SORTIE\n1. Ne modifie JAMAIS les clés \"role\" ou \"text\".\n2. Ne supprime aucun objet de la liste.\n3. Conserve les formules de politesse et le ton original.\n4. Réponds UNIQUEMENT avec le JSON modifié, sans texte explicatif avant ou après.\n5. Ne modifie jamais le contenu des messages sauf pour remplacer les informations sensibles.\n\n### EXEMPLE DE TRANSFORMATION (Input -> Output)\n\n**ENTRÉE :**\n[\n  {\"role\": \"agent\", \"text\": \"Bonjour, je suis Marc. Je vois que votre adresse est le 5 rue des Fleurs à Lyon.\"},\n  {\"role\": \"client\", \"text\": \"C'est exact. Mon mail est jean.dupont@gmail.com et mon IBAN est FR76 1234 5678.\"}\n]\n\n**SORTIE :**\n[\n  {\"role\": \"agent\", \"text\": \"Bonjour, je suis [Prénom]. Je vois que votre adresse est le [Adresse] à [Ville].\"},\n  {\"role\": \"client\", \"text\": \"C'est exact. Mon mail est [Email] et mon IBAN est [IBAN].\"}\n]"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        800,
+        80
+      ],
+      "id": "a56f56c7-814c-4801-8aed-569dc9bc7fed",
+      "name": "RGPD Agent1",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "content": "### Anonymise les données clients",
+        "height": 368,
+        "width": 480
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        608,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "7b1b1742-d6ff-460a-ac3e-a03472b40ed3",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "### Importe le fichier sur le corpus RAG",
+        "height": 240,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1664,
+        0
+      ],
+      "typeVersion": 1,
+      "id": "025ef382-7261-48e1-ba78-f55a8fc3f4cf",
+      "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://europe-west9-aiplatform.googleapis.com/v1beta1/projects/gen-lang-client-0462375962/locations/europe-west9/ragCorpora/5685794529555251200/ragFiles:import",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"import_rag_files_config\": {\n    \"gcs_source\": {\n      \"uris\": [\n        \"gs://{{ $json.bucket }}/{{ $json.name }}\"\n      ]\n    },\n    \"max_embedding_requests_per_min\": 1000\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1744,
+        80
+      ],
+      "id": "32d21bb6-1f82-4493-baf1-a2c996ea7f0b",
+      "name": "HTTP Request",
+      "credentials": {
+        "googleOAuth2Api": {
+          "id": "IzFTbiFoSCyMrO3b",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### Configuration du Scheduled Trigger : \n\nOn récupère les nouveaux tickers \"solved\". Il faut executer le workflow au moins tous les 4 jours car un ticket solved passe en statut \"closed\" au bout de 4 jours par défaut sur Zendesk",
+        "height": 336,
+        "width": 272
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1216,
+        -16
+      ],
+      "typeVersion": 1,
+      "id": "1dec147b-a8db-4e6d-95cb-c9d828baa578",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "jsCode": "// On récupère tous les champs (items) envoyés par l'API Zendesk\nconst items = $input.all();\n\n// On cherche l'item dont le titre est exactement 'Motif de contact'\nconst motifField = items.find(item => item.json.title === 'Motif de contact interne');\n\n// Si on le trouve, on renvoie son ID\nif (motifField) {\n  return {\n    json: {\n      id: motifField.json.id\n    }\n  };\n} else {\n  // Si on ne le trouve pas, on génère une erreur pour stopper le workflow proprement\n  throw new Error(\"Le champ 'Motif de contact' n'a pas été trouvé dans la liste des champs Zendesk.\");\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        80
+      ],
+      "id": "c622ca35-27cf-4401-bcd2-88cc005bf902",
+      "name": "Get id \"motif de contact\""
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1296,
+        80
+      ],
+      "id": "21cc3fe3-9467-400c-9d38-40799d3f2ce2",
+      "name": "Create JSON"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c6fad801-8be3-4239-b5cb-31f5b78a6faf",
+              "name": "object_name",
+              "value": "=tickets_{{ $today.format('yyyy-MM-dd') }}_{{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -752,
+        80
+      ],
+      "id": "7094f550-d242-42a8-9128-d0350e60c78e",
+      "name": "Generate GCP object id"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "30fb91c0-cecb-42b2-baa6-6b17da077c9d",
+              "leftValue": "={{ $json.tags }}",
+              "rightValue": "saved_ticket",
+              "operator": {
+                "type": "array",
+                "operation": "notContains",
+                "rightType": "any"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        64,
+        80
+      ],
+      "id": "de4956f1-6a72-407f-a655-59af22a2a9bb",
+      "name": "Filter"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "options": {
+          "status": "solved"
+        }
+      },
+      "type": "n8n-nodes-base.zendesk",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        80
+      ],
+      "id": "b35fa55e-7be1-48d2-a4ba-b58719dce3cb",
+      "name": "New solved tickets",
+      "credentials": {
+        "zendeskApi": {
+          "id": "d9TzMxjRB1yc0Php",
+          "name": "Zendesk account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "id": "={{ $json.ticket_id }}",
+        "updateFields": {
+          "tags": [
+            "saved_ticket"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.zendesk",
+      "typeVersion": 1,
+      "position": [
+        1296,
+        336
+      ],
+      "id": "7d6ba0d3-e6a7-4bf8-81db-b232f0522580",
+      "name": "Update a ticket",
+      "credentials": {
+        "zendeskApi": {
+          "id": "d9TzMxjRB1yc0Php",
+          "name": "Zendesk account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### Ajoute un tag \"saved_ticket\"",
+        "height": 240,
+        "width": 256
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1232,
+        256
+      ],
+      "typeVersion": 1,
+      "id": "580c3a89-5877-4283-a1e9-7ff75401ba91",
+      "name": "Sticky Note7"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Generate GCP object id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get ticket messages": {
+      "main": [
+        [
+          {
+            "node": "Get Motif de contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format conversation": {
+      "main": [
+        [
+          {
+            "node": "RGPD Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many ticket fields": {
+      "main": [
+        [
+          {
+            "node": "Get id \"motif de contact\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create an object": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Motif de contact": {
+      "main": [
+        [
+          {
+            "node": "Format conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gather fields": {
+      "main": [
+        [
+          {
+            "node": "Create JSON",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update a ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Vertex Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "RGPD Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "RGPD Agent1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RGPD Agent1": {
+      "main": [
+        [
+          {
+            "node": "Gather fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get id \"motif de contact\"": {
+      "main": [
+        [
+          {
+            "node": "New solved tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create JSON": {
+      "main": [
+        [
+          {
+            "node": "Create an object",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate GCP object id": {
+      "main": [
+        [
+          {
+            "node": "Get many ticket fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New solved tickets": {
+      "main": [
+        [
+          {
+            "node": "Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        []
+      ]
+    },
+    "Filter": {
+      "main": [
+        [
+          {
+            "node": "Get ticket messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "bfcef8b3-a3d9-40d5-8f14-d9e05fbad130",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "807350171a56976a6887302d8c27cc437d24590636bc062b3576449a5ddbb25d"
+  },
+  "id": "mVTflbghre7w3mED",
+  "tags": []
+}

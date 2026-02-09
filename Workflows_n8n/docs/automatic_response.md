@@ -1,50 +1,119 @@
-## 1. Workflow : Automatic_Response
+# Workflow : Automatic_Response
 
-### 🎯 Objectif
-Générer automatiquement une proposition de réponse pour les tickets Zendesk entrants afin d'accélérer le traitement par les agents humains.
+## Objectif
 
-### 🔄 Fonctionnement
+Generer automatiquement une proposition de reponse pour un ticket Zendesk entrant afin d'accelerer le traitement par les agents humains. La reponse est ajoutee comme **note interne** : l'agent humain valide ou modifie avant envoi au client.
 
-**Déclencheur :** 
-- Exécution toutes les heures (Schedule Trigger)
-- Récupère les tickets créés par email dans les 1h20 précédentes
+**Type : Sous-workflow** (declenche par Get_Motif_Contact via le noeud "Execute Workflow"). Dans n8n, un sous-workflow n'a pas besoin d'etre mis en "actif" : il s'execute automatiquement lorsque le workflow appelant le declenche.
 
-**Pipeline de traitement :**
+## Declencheur
 
-1. **Agent "Analyste"** (Premier LLM)
-   - Analyse le sujet et la description du ticket
-   - Effectue EXACTEMENT UNE recherche dans deux sources :
-     - `Documentation` : Procédures bancaires officielles, limites, règles de conformité
-     - `Solved tickets` : Historique des conversations agent/client
-   - Retourne un JSON structuré avec :
-     - `official_procedure` : Procédure officielle applicable
-     - `past_precedents` : Précédents similaires
-     - `missing_info` : Informations manquantes détectées
-   
-2. **Agent "Rédacteur"** (Second LLM)
-   - Reçoit les notes techniques de l'Analyste
-   - Détecte le segment client (Freelancers, Entreprises, Associations)
-   - Adapte le ton de la réponse :
-     - **Freelancers** : Direct, efficace, "straight-to-the-point"
-     - **Entreprises/Associations** : Structuré, rassurant, formel
-   - Génère une réponse en français avec :
-     - Salutation professionnelle
-     - Explication claire (avec bullet points si nécessaire)
-     - Prochaines étapes
-     - Clôture standard Anytime
+- **Execute Workflow Trigger** : appele par le workflow Get_Motif_Contact
+- **Parametre d'entree** : `ticket_id` (number)
 
-3. **Mise à jour Zendesk**
-   - Ajoute la réponse générée comme **note interne** au ticket
-   - L'agent humain peut la valider/modifier avant envoi au client
+Ce workflow n'a pas de schedule propre. Il est declenche a la demande apres chaque classification de ticket.
 
-### 📋 Sortie
-- **Si pertinent** : Note interne avec la réponse proposée
-- **Si non pertinent** : `"Pas de réponse automatique pertinente"`
+## Canaux traites
 
-### 🔧 Technologies utilisées
-- **Google Vertex AI** (Gemini) : 2 agents LLM
-- **Vertex RAG Store** : Recherche dans la documentation et les tickets résolus
-- **Zendesk API** : Récupération et mise à jour des tickets
-- **Structured Output Parser** : Garantit des réponses JSON bien formatées
+Le workflow gere deux canaux de communication :
+- **Email** : sujet et description standards du ticket
+- **Native messaging (BAQ)** : sujet et description dans des champs personnalises Zendesk
 
----
+## Pipeline de traitement
+
+```
+ticket_id (depuis Get_Motif_Contact)
+    |
+    v
+[New ticket]
+    --> GET /api/v2/tickets/{ticket_id}.json
+    --> Recupere les details complets du ticket
+    |
+    v
+[Switch par canal]
+    ├── Email : extrait subject + description
+    └── Native messaging : extrait champs BAQ
+    |
+    v
+[Merge]
+    |
+    v
+[Analyste] (Agent LLM #1 - Google Vertex Gemini)
+    |   Outils disponibles :
+    |   ├── Documentation (RAG) : procedures bancaires officielles
+    |   └── Solved tickets (RAG) : historique des conversations resolues
+    |
+    |   --> 1 recherche dans Documentation + 1 recherche dans Solved tickets
+    |   --> Retourne : {official_procedure, past_precedents, missing_info}
+    |
+    v
+[Redacteur] (Agent LLM #2 - Google Vertex Gemini)
+    |   --> Recoit les notes techniques de l'Analyste
+    |   --> Detecte le segment client (Freelancer / Entreprise / Association)
+    |   --> Redige la reponse en francais
+    |   --> Retourne : {reponse}
+    |
+    v
+[Code JavaScript]
+    --> Convertit le markdown en HTML
+    |
+    v
+[HTTP Request]
+    --> Ajoute une note interne au ticket Zendesk
+```
+
+## Agent LLM #1 : Analyste
+
+**Prompt** : `prompts/Auto_reponse_Analyste.md`
+
+**Role** : Technical Support Analyst
+
+**Regles operationnelles** :
+- **Single Pass Only** : exactement 1 recherche dans Documentation + 1 dans Solved tickets
+- **Pas de retry** : si les resultats sont vides, retourne `"NO_RELEVANT_INFORMATION"`
+- **Priorite** : en cas de contradiction, la Documentation prime sur les Solved tickets
+
+**Format de sortie** :
+
+```json
+{
+  "official_procedure": "Selon la doc 'Limites', le plafond standard est de 5000EUR/30 jours...",
+  "past_precedents": "Dans le ticket #4402, nous avons demande une facture pro-forma...",
+  "missing_info": "Le client n'a pas precise s'il a essaye via l'App."
+}
+```
+
+## Agent LLM #2 : Redacteur
+
+**Prompt** : `prompts/Auto_reponse_Redacteur.md`
+
+**Role** : Senior Customer Support Specialist
+
+**Adaptation par segment** :
+- **Freelancers** : ton direct, efficace, "straight-to-the-point"
+- **Entreprises / Associations** : ton structure, rassurant, formel
+
+**Structure de la reponse** :
+1. Salutation professionnelle
+2. Explication claire (avec bullet points si necessaire)
+3. Prochaines etapes
+4. Cloture standard Anytime
+
+**Securite** : si l'Analyste retourne `"NO_RELEVANT_INFORMATION"`, le Redacteur retourne :
+```json
+{"reponse": "Pas de réponse automatique pertinente"}
+```
+
+## Sortie
+
+- **Si pertinent** : note interne au ticket avec la reponse proposee (HTML)
+- **Si non pertinent** : note interne `"Pas de réponse automatique pertinente"`
+
+L'agent humain retrouve cette note dans le ticket et peut la valider, modifier ou ignorer avant d'envoyer une reponse au client.
+
+## Points d'attention
+
+- Ce workflow est un **sous-workflow** : il n'apparait pas comme "actif" dans n8n mais s'execute bien quand Get_Motif_Contact l'appelle
+- Les deux agents LLM utilisent le Vertex RAG Store pour rechercher dans la documentation et les tickets resolus
+- La reponse est convertie en HTML avant d'etre postee comme note interne
+- La reponse n'est jamais envoyee directement au client : elle passe obligatoirement par un agent humain

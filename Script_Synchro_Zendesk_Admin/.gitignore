@@ -1,0 +1,6 @@
+/vendor/
+.env
+.env.*
+!.env.example
+*.log
+last_sync.txt

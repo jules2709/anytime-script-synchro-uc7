@@ -1,0 +1,665 @@
+{
+  "name": "Automatic_Response",
+  "nodes": [
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "gen-lang-client-0462375962",
+          "mode": "list",
+          "cachedResultName": "Anytime"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleVertex",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -288
+      ],
+      "id": "87b78c13-bc28-4306-90aa-5c071b700d06",
+      "name": "Google Vertex Chat Model2",
+      "credentials": {
+        "googleApi": {
+          "id": "6vS8Owh7HtNYTqy5",
+          "name": "Google Service Account account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"official_procedure\": \"\",\n  \"past_precedents\": \"\",\n  \"missing_info\": \"\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        256,
+        -304
+      ],
+      "id": "e1ea9046-c57b-4c6b-9f48-d24126c73654",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "projectId": {
+          "__rl": true,
+          "value": "gen-lang-client-0462375962",
+          "mode": "list",
+          "cachedResultName": "Anytime"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleVertex",
+      "typeVersion": 1,
+      "position": [
+        384,
+        -272
+      ],
+      "id": "46a4c9bb-8126-4d3c-8063-787c9353d232",
+      "name": "Google Vertex Chat Model3",
+      "credentials": {
+        "googleApi": {
+          "id": "6vS8Owh7HtNYTqy5",
+          "name": "Google Service Account account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Subject : {{ $json.subject }}\nCustomer Message: {{ $json.description }}\n",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are a Technical Support Analyst at Anytime.\nYour sole purpose is to retrieve factual information to facilitate a customer support ticket resolution.\n\n**You have access to two specific search tools:**\n1. `Documentation`: Contains official banking procedures, limits, and compliance rules.\n2. `Solved tickets`: Contains historical conversations between human agents and customers.\n\n**Strict Operational Rules:**\n1. **Analyze** the customer request to extract the core keywords.\n2. **Execution (Single Pass Only):**\n   - Perform EXACTLY ONE search on `Documentation` using the most relevant keywords.\n   - Perform EXACTLY ONE search on `Solved tickets` for context.\n   - **DO NOT** perform follow-up searches or retry with synonyms if the first results are empty. Stop immediately.\n3. **Synthesis:**\n   - If `Documentation` and `Solved tickets` contradict, prioritize `Documentation`.\n   - If no relevant information is found in either tool after the single attempt, fill the JSON fields with \"NO_RELEVANT_INFORMATION\".\n\n**Output Format:**\nYou must output a **valid JSON object** containing the 3 fields below. Do not wrap it in markdown code blocks.\n\nExample of output:\n{\n  \"official_procedure\": \"According to doc 'Limits', standard limit is 5000€/30 days...\",\n  \"past_precedents\": \"In ticket #4402, we asked for a pro-forma invoice...\",\n  \"missing_info\": \"Client did not specify if they tried via the App.\"\n}\n\n**Your Response:**",
+          "maxIterations": 5
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        32,
+        -496
+      ],
+      "id": "5b3fe06b-67ba-4d09-bfed-ba154302bca4",
+      "name": "Analyste1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=**Input Data:**\n1.  Original request : {{ $('New ticket').item.json.description }}\n2. Technical notes from Agent 1 : \n{\n  Procédure :{{ $json.output.official_procedure }}\n  Tickets précédents: {{ $json.output.past_precedents }}\n  \"missing_info\": {{ $json.output.missing_info }}\n}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are a Senior Customer Support Specialist at Anytime.\nYour goal is to draft a response for a human agent based on technical notes provided by an analyst.\n\n**Context:**\n- You support three segments: Freelancers, Companies (SMEs), and Associations.\n- **Freelancers:** Value speed, efficiency, and a \"straight-to-the-point\" attitude.\n- **Companies/Associations:** Value structure, reassurance, and formality.\n\n\n**Instructions:**\n1. **Safety Check:** If technical notes from Agent 1 contains \"NO_RELEVANT_INFORMATION\" in all fields or if you don't have enough information, output strictly:\n   {\"reponse\": \"Pas de réponse automatique pertinente\"}\n\n2. **Drafting Strategy:**\n   - Analyze the customer's message to detect the likely segment (e.g., formal language vs. casual). Adapt your tone accordingly.\n   - Write the response in **French**.\n   - Use the facts from the \"Official Procedure\" provided by the Analyst.\n   - Use the \"Past Precedents\" only to guide the helpfulness of the tone, do not promise things that violate the procedure.\n\n3. **Response Structure:**\n   - **Salutation:** Professional and warm.\n   - **Body:** Clear explanation of the solution. Use bullet points for steps.\n   - **Next Steps:** Tell the user exactly what to do (or what you have done).\n   - **Closing:** Standard Anytime closing.\n\n4. **Output Format:**\n   - Provide the response strictly in JSON format.\n   - JSON keys must be valid.\n\n**JSON Output Example:**\n{\"reponse\": \"Bonjour [Nom],\\n\\n[Votre réponse rédigée ici]...\"}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        384,
+        -496
+      ],
+      "id": "af4d4bb3-4b53-4c6e-ae7d-af78120d016f",
+      "name": "Rédacteur1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Useful for searching internal banking procedures, account types (BAQ), compliance rules, and specific Anytime service details. Use this tool whenever the customer asks a question about how Anytime works or what the specific conditions for freelancers are.",
+        "method": "POST",
+        "url": "https://europe-west9-aiplatform.googleapis.com/v1beta1/projects/gen-lang-client-0462375962/locations/europe-west9:retrieveContexts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vertex_rag_store\": {\n    \"rag_resources\": [\n      {\n        \"rag_corpus\": \"projects/gen-lang-client-0462375962/locations/europe-west9/ragCorpora/5685794529555251200\"\n      }\n    ]\n  },\n  \"query\": {\n    \"text\": \"{{ $fromAI('query', `A query in french to get information from the vector database`, 'string') }}\",\n    \"similarity_top_k\": 3\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        192,
+        -160
+      ],
+      "id": "d1e80012-0859-4a97-96fe-c620d7431bb4",
+      "name": "Solved tickets1",
+      "credentials": {
+        "googleApi": {
+          "id": "6vS8Owh7HtNYTqy5",
+          "name": "Google Service Account account 2"
+        },
+        "googleOAuth2Api": {
+          "id": "IzFTbiFoSCyMrO3b",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Useful for searching internal banking procedures, account types (BAQ), compliance rules, and specific Anytime service details. Use this tool whenever the customer asks a question about how Anytime works or what the specific conditions for freelancers are.",
+        "method": "POST",
+        "url": "https://europe-west9-aiplatform.googleapis.com/v1beta1/projects/gen-lang-client-0462375962/locations/europe-west9:retrieveContexts",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleOAuth2Api",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"vertex_rag_store\": {\n    \"rag_resources\": [\n      {\n        \"rag_corpus\": \"projects/gen-lang-client-0462375962/locations/europe-west9/ragCorpora/2305843009213693952\"\n      }\n    ]\n  },\n  \"query\": {\n    \"text\": \"{{ $fromAI('query', `A query in french to get information from the vector database`, 'string') }}\",\n    \"similarity_top_k\": 3\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        64,
+        -160
+      ],
+      "id": "065985c7-d718-49ca-b503-47461dad26a7",
+      "name": "Documentation1",
+      "credentials": {
+        "googleApi": {
+          "id": "6vS8Owh7HtNYTqy5",
+          "name": "Google Service Account account 2"
+        },
+        "googleOAuth2Api": {
+          "id": "IzFTbiFoSCyMrO3b",
+          "name": "Google account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n\t\"reponse\": \"\"\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        528,
+        -272
+      ],
+      "id": "b2bb972b-3370-4b6e-8bea-581943dfbc36",
+      "name": "Structured Output Parser3"
+    },
+    {
+      "parameters": {
+        "content": "### Récupère les nouveaux tickets",
+        "height": 240,
+        "width": 432
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -960,
+        -560
+      ],
+      "typeVersion": 1,
+      "id": "6faffe2e-f9fb-454f-ab7a-c16a23c1fe12",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "### Analyse ticket based on Anytime doc and solved tickets",
+        "height": 512,
+        "width": 368
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -32,
+        -576
+      ],
+      "typeVersion": 1,
+      "id": "22c5e96a-22b1-4285-9cfd-16dd7e56a16e",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "### Propose une réponse à l'agent Anytime",
+        "height": 512,
+        "width": 320
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        352,
+        -576
+      ],
+      "typeVersion": 1,
+      "id": "f9bcd877-850b-4647-8f44-c42ad2928a5e",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "### Ajoute une note interne au ticket avec la réponse proposée",
+        "height": 240,
+        "width": 400
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        688,
+        -576
+      ],
+      "typeVersion": 1,
+      "id": "debe7ee2-1a1d-4390-80d2-d5af165bfbb7",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "ticket_id",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -880,
+        -496
+      ],
+      "id": "cf4e1591-ed3c-4a7f-aaaa-b7419afdc737",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "id": "={{ $json.ticket_id }}"
+      },
+      "type": "n8n-nodes-base.zendesk",
+      "typeVersion": 1,
+      "position": [
+        -688,
+        -496
+      ],
+      "id": "ca98ba86-dd95-46ea-8420-40760152d23d",
+      "name": "New ticket",
+      "credentials": {
+        "zendeskApi": {
+          "id": "d9TzMxjRB1yc0Php",
+          "name": "Zendesk account 2"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -160,
+        -496
+      ],
+      "id": "e315e60a-44f7-4e6b-b26c-b9fbceeee049",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.via.channel }}",
+                    "rightValue": "email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "6b9c0129-2158-4472-8341-e9d18739765e"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "3773ac67-99e3-4e0f-94c7-112ab9acbc7e",
+                    "leftValue": "={{ $json.via.channel }}",
+                    "rightValue": "native_messaging",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Messages BAQ"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -512,
+        -496
+      ],
+      "id": "7710a912-ae8e-48ad-be5b-13a8c8f96544",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9d55dcc4-64c6-472f-8eb6-7bd80b1cf42a",
+              "name": "subject",
+              "value": "={{ $json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "765998d3-4d40-4681-b399-ee29907373ee",
+              "name": "description",
+              "value": "={{ $json.description }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -352,
+        -608
+      ],
+      "id": "ce14e87d-53f3-446d-a899-15bd2932678f",
+      "name": "Mail input"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "648830fb-ebf5-4a20-8923-a13a272ea6dd",
+              "name": "subject",
+              "value": "={{ $json.custom_fields.find(item => item.id === 43473213212177)?.value }}",
+              "type": "string"
+            },
+            {
+              "id": "1c50f654-0db0-4fbe-a206-8dab0df175c3",
+              "name": "description",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d2e4a294-0bcc-4a0a-8291-3d33b44044fc",
+              "name": "description",
+              "value": "={{ $json.custom_fields.find(item => item.id === 42767615870481)?.value }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -352,
+        -384
+      ],
+      "id": "ca4bd1eb-b701-4ae7-a8a6-648b1ac71854",
+      "name": "Message input"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://anytime-42666.zendesk.com/api/v2/tickets/{{ $('New ticket').item.json.id }}.json",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "zendeskApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"ticket\": {\n    \"comment\": {\n      \"html_body\": {{ JSON.stringify($json.html_note) }},\n      \"public\": false\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        896,
+        -496
+      ],
+      "id": "a16c51c4-5e86-4b88-af8b-16eaaece9737",
+      "name": "HTTP Request1",
+      "credentials": {
+        "zendeskApi": {
+          "id": "d9TzMxjRB1yc0Php",
+          "name": "Zendesk account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseMarkdown(text) {\n  if (!text) return '';\n  let html = text.toString();\n\n  // 1. Nettoyage préliminaire\n  html = html.replace(/\\\\n/g, '\\n');\n  html = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\n  // 2. GESTION DES TITRES\n  html = html.replace(/^(\\#{2,6})\\s+(.*)$/gm, (match, hashes, content) => {\n      const level = hashes.length;\n      if (level === 4) return `<h6 style=\"margin: 10px 0 2px 0; font-size: 12px; font-weight: bold; color: #000;\">${content}</h6>`;\n      if (level === 3) return `<h5 style=\"margin: 12px 0 5px 0; font-size: 12px; color: #777; text-transform: uppercase; letter-spacing: 0.5px;\">${content}</h5>`;\n      if (level === 2) return `<h4 style=\"margin: 18px 0 8px 0; font-size: 15px; color: #2c3e50; border-bottom: 1px solid #ddd; padding-bottom: 4px;\">${content}</h4>`;\n      return `<strong>${content}</strong><br>`;\n  });\n\n  // 3. TRAITEMENT DES LISTES\n  html = html.replace(/^\\s*[\\-\\*]\\s+(.*)$/gm, '<li style=\"margin-left: 20px;\">$1</li>');\n  html = html.replace(/((<li.*>.*<\\/li>\\n*)+)/g, '<ul style=\"margin-bottom: 10px;\">$1</ul>');\n\n  // 4. FORMATAGE TEXTE\n  html = html.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>');\n  html = html.replace(/\\*([^\\*]+)\\*/g, '<em>$1</em>');\n\n  // 5. FINITIONS\n  html = html.replace(/\\n/g, '<br>');\n  html = html.replace(/<\\/ul><br>/g, '</ul>');\n  html = html.replace(/<\\/h[456]><br>/g, (match) => match.replace('<br>', ''));\n\n  return html;\n}\n\n// Adaptation pour ton nœud n8n (Input unique : reponse)\nreturn $input.all().map(item => {\n  const rawText = item.json.output.reponse || '';\n  item.json.html_note = parseMarkdown(rawText);\n  return item;\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        -496
+      ],
+      "id": "0bf1f069-bd3c-4b27-b99e-19a362243a59",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Vertex Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyste1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Analyste1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Vertex Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Rédacteur1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyste1": {
+      "main": [
+        [
+          {
+            "node": "Rédacteur1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solved tickets1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Analyste1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Documentation1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Analyste1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser3": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Rédacteur1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rédacteur1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "New ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New ticket": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Mail input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mail input": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message input": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Analyste1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "db951649-e396-4ce6-9016-dcbe4861d350",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "807350171a56976a6887302d8c27cc437d24590636bc062b3576449a5ddbb25d"
+  },
+  "id": "xdptSDNNUgs2TwHd",
+  "tags": []
+}

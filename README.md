@@ -1,144 +1,105 @@
 # Anytime Zendesk Integration
 
-Suite d'outils d'automatisation pour synchroniser et traiter les tickets Zendesk chez Anytime. Ce projet combine un script PHP backend avec des workflows n8n pour offrir une solution complète de gestion des tickets de support.
+Suite d'outils pour la synchronisation et l'automatisation du support Zendesk chez Anytime. Le projet couvre la migration initiale des anciens messages vers Zendesk, la synchronisation continue des nouveaux messages Zendesk vers MariaDB Admin, ainsi que l'automatisation intelligente des tickets via des workflows n8n.
 
-## 📋 Vue d'ensemble
+## Structure du projet
 
-Le projet se divise en deux composants majeurs :
+```
+any-zendesk/
+├── Script_Synchro_Zendesk_Admin/     # Zendesk --> MariaDB (cron periodique)
+├── Script_Historique_Admin_Zendesk/  # MariaDB --> Zendesk/Widget (one-shot)
+├── Workflows_n8n/                    # Workflows n8n (classification, reponse auto, archivage)
+└── README.md
+```
 
-### 1. **Script_MessageZendesk_Admin** - Synchronisation des messages
-Script PHP qui synchronise les messages des transcriptions chat Zendesk vers la base de données historique du client (MariaDB).
+## Les 2 scripts PHP
 
-**Utilité :** Assurer une synchronisation continue entre Zendesk et la base de données historique Admin pour traçabilité et consultation des conversations passées.
+### 1. Script_Synchro_Zendesk_Admin - Synchronisation Zendesk vers MariaDB
 
-**Stack :** PHP 8.2, Hexagonal Architecture, Symfony Messenger, Guzzle, PDO
+Synchronise les nouveaux messages de chat Zendesk vers la base MariaDB Admin. Recupere les evenements de tickets via l'API incrementale, extrait les transcripts de chat, et insere les messages parses dans la table `messages`.
 
-**Exécution :** Horaire via CRON (peut être intégré dans un système d'orchestration)
-
-📖 [Documentation détaillée](Script_MessageZendesk_Admin/Documentation_IT.md)
-
-### 2. **Workflows_n8n** - Automatisation intelligente
-Trois workflows n8n utilisant Google Vertex AI pour automatiser les tâches de support.
-
-| Workflow | Fréquence | Fonction |
-|----------|-----------|----------|
-| **Automatic_Response** | Horaire | Génère automatiquement des réponses proposées aux tickets entrants |
-| **Get_Motif_Contact** | Horaire | Classifie les tickets dans des catégories prédéfinies |
-| **Store_solved_tickets** | Hebdomadaire | Archive et anonymise les tickets résolus pour la base de connaissances |
-
-📖 [Documentation des workflows](Workflows_n8n/Documentation_Workflows.md)
-
-## 🚀 Quick Start
-
-### Prérequis
-- PHP 8.2+
-- Composer
-- MariaDB
-- Credentials Zendesk (email, token, subdomain)
-- Google Cloud (Vertex AI, Cloud Storage) pour les workflows
-
-### Installation du script PHP
+| | |
+|-|-|
+| **Direction** | Zendesk --> MariaDB |
+| **Frequence** | Periodique (cron toutes les 5 min recommande) |
+| **Stack** | PHP 8.2, Architecture Hexagonale, Symfony Messenger, Guzzle, PDO |
 
 ```bash
-cd Script_MessageZendesk_Admin
+cd Script_Synchro_Zendesk_Admin
 composer install
-cp .env.example .env
-# Éditer .env avec vos credentials
+cp .env.example .env    # Configurer credentials Zendesk + MariaDB
 php script.php
 ```
 
-### Déploiement des workflows n8n
+Documentation :
+- [Guide d'Utilisation](Script_Synchro_Zendesk_Admin/docs/Guide_Utilisation.md)
+- [Reference Technique](Script_Synchro_Zendesk_Admin/docs/Reference_Technique.md)
+- [Guide de Deploiement IT](Script_Synchro_Zendesk_Admin/docs/Guide_Deploiement.md)
 
-1. Accédez à votre instance n8n
-2. Créez un nouveau workflow ou importez depuis les fichiers JSON
-3. Configurez les credentials (Zendesk API, Google Service Account)
-4. Activez les workflows avec les triggers programmés
+### 2. Script_Historique_Admin_Zendesk - Migration historique vers Zendesk
 
-## 🏗️ Architecture
+Migre les anciens messages de MariaDB vers Zendesk via Sunshine Conversations (SunCo), afin que les clients puissent consulter leur historique dans le widget Zendesk.
 
-### Script PHP : Hexagonal Architecture
+| | |
+|-|-|
+| **Direction** | MariaDB --> Zendesk/Widget |
+| **Frequence** | Execution unique (+ relance si erreurs) |
+| **Stack** | PHP 8.2, Architecture Hexagonale, Symfony Messenger, Guzzle, PDO |
 
-```
-Domain (Métier)
-    ├── Entities : Message
-    └── Repositories : Interfaces ZendeskRepository, MessageRepository
-         ↓
-Application (Use Cases)
-    └── Handler : SyncZendeskMessagesHandler
-         ↓
-Infrastructure (Implémentation)
-    ├── ZendeskApiClient (Guzzle)
-    └── MariaDBMessageRepository (PDO)
-```
-
-### Workflows n8n : Pipeline IA
-
-```
-Zendesk → LLM Analyst (Recherche doc) 
-       → LLM Writer (Rédaction) 
-       → Zendesk Update (Note interne)
+```bash
+cd Script_Historique_Admin_Zendesk
+composer install
+cp .env.example .env    # Configurer credentials SunCo + Zendesk + MariaDB
+php script.php          # Tous les utilisateurs
+php script.php 3119     # Un seul utilisateur
 ```
 
-## 📊 Flux de données
+Documentation :
+- [Guide d'Utilisation](Script_Historique_Admin_Zendesk/docs/Guide_Utilisation.md)
+- [Reference Technique](Script_Historique_Admin_Zendesk/docs/Reference_Technique.md)
+- [Guide de Deploiement IT](Script_Historique_Admin_Zendesk/docs/Guide_Deploiement.md)
 
-### Script PHP
+### Ordre de deploiement
 
-1. Récupère les événements Zendesk depuis `last_sync.txt`
-2. Filtre les transcriptions chat
-3. Parse les messages avec regex pour distinguer client/agent
-4. Mappe les données (statut, priorité, utilisateurs)
-5. Insère dans la table `messages` de la base de données historique du client
-6. Sauvegarde le nouveau timestamp pour la prochaine exécution
+Le script d'historique doit etre execute et termine **avant** d'activer le cron de synchronisation :
 
-### Workflows n8n
+```
+1. Deployer et executer Script_Historique_Admin_Zendesk   (migration one-shot)
+2. Verifier que la migration est complete
+3. PUIS activer le cron de Script_Synchro_Zendesk_Admin
+```
 
-1. **Automatic_Response** : Analyse → Recherche → Rédaction → Mise à jour ticket
-2. **Get_Motif_Contact** : Classification du motif → Mise à jour champ custom
-3. **Store_solved_tickets** : Récupération → Anonymisation RGPD → Cloud Storage
+Le tag `historique_admin` pose par le script d'historique empeche le script de synchro de reimporter ces tickets.
 
-## 🔐 Sécurité & RGPD
+## Workflows n8n
 
-- Authentification token Zendesk (pas de credentials en dur)
-- Variables d'environnement pour les secrets
-- Anonymisation complète des données sensibles (noms, emails, IBAN, etc.)
+Trois workflows automatisent le traitement des tickets Zendesk via Google Vertex AI (Gemini) :
 
-## 📈 Monitoring
+| Workflow | Role | Declencheur |
+|----------|------|-------------|
+| **Get_Motif_Contact** | Classification automatique du motif de contact | Schedule : toutes les 10 min (9h-18h, lun-ven) |
+| **Automatic_Response** | Generation de proposition de reponse (note interne) | Sous-workflow : appele par Get_Motif_Contact |
+| **Store_solved_tickets** | Archivage anonymise (RGPD) + import RAG | Schedule : tous les 2 jours a minuit |
 
-### Script PHP
-- Vérifier `last_sync.txt` pour le dernier timestamp
-- Logs des insertions en base
-- Erreurs de connexion Zendesk/MariaDB
+Documentation :
+- [Vue d'ensemble des workflows](Workflows_n8n/docs/workflows_overview.md)
+- [Get_Motif_Contact](Workflows_n8n/docs/get_motif_contact.md)
+- [Automatic_Response](Workflows_n8n/docs/automatic_response.md)
+- [Store_solved_tickets](Workflows_n8n/docs/store_solved_tickets.md)
 
-### Workflows n8n
-- Dashboard n8n : Succès/Erreurs par workflow
-- Taux de confiance des classifications
-- Volume de réponses automatiques utilisées
+## Prerequis
 
-## 🔧 Développement
+- **PHP 8.2+** avec extensions `pdo_mysql`, `curl`, `json`, `mbstring`
+- **Composer** >= 2.x
+- **MariaDB** (table `messages`)
+- **Credentials Zendesk** (subdomain, email, token API)
+- **Credentials Sunshine Conversations** (app ID, key ID, secret) - uniquement pour le script d'historique
+- **Google Cloud** (Vertex AI, Cloud Storage) - uniquement pour les workflows n8n
+- **n8n** - pour les workflows d'automatisation
 
-### Ajouter une nouvelle API Zendesk
+## Securite et RGPD
 
-1. Implémenter dans `ZendeskRepositoryInterface`
-2. Ajouter l'implémentation dans `ZendeskApiClient`
-3. Utiliser dans `SyncZendeskMessagesHandler`
-
-### Modifier les transformations de données
-
-Voir `Utils.php` pour :
-- `mapZendeskStatusToDb()`
-- `mapPriorityToReport()`
-- `parseCommentBody()`
-- Autres fonctions de mapping
-
-## 📚 Documentation complète
-
-- [Documentation Technique - Script PHP](Script_MessageZendesk_Admin/Documentation_IT.md)
-- [Documentation Workflows n8n](Workflows_n8n/docs)
-
-## 🤝 Support
-
-Pour questions ou issues :
-1. Consulter la documentation complète
-2. Vérifier les logs des exécutions précédentes
-3. Valider les credentials Zendesk et Google Cloud
-
+- Credentials stockees dans des fichiers `.env` (non commites) ou dans n8n
+- Anonymisation RGPD des tickets archives (noms, emails, IBAN, etc.)
+- Tag `historique_admin` pour eviter les boucles de synchronisation entre les scripts
+- Tag `saved_ticket` pour eviter les doublons d'archivage

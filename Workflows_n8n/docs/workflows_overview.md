@@ -1,88 +1,114 @@
-# Documentation Workflows n8n - Anytime Zendesk Integration
+# Vue d'ensemble - Workflows n8n Anytime
 
-Cette documentation décrit les trois workflows n8n déployés pour automatiser la gestion des tickets de support Zendesk chez Anytime.
+## Objectif
 
----
+Trois workflows n8n automatisent le traitement des tickets de support Zendesk chez Anytime via Google Vertex AI (Gemini).
 
-## Vue d'ensemble
+## Les 3 workflows
 
-Les workflows s'articulent autour de trois objectifs principaux :
-1. **Automatic_Response** : Génération automatique de réponses aux tickets entrants
-2. **Get_Motif_Contact** : Classification automatique du motif de contact
-3. **Store_solved_tickets** : Archivage et anonymisation des tickets résolus pour la base de connaissances
+| Workflow | Role | Declencheur |
+|----------|------|-------------|
+| **Get_Motif_Contact** | Classification automatique du motif de contact | Schedule : toutes les 10 min (9h-18h, lun-ven) |
+| **Automatic_Response** | Generation de proposition de reponse | Sous-workflow : appele par Get_Motif_Contact |
+| **Store_solved_tickets** | Archivage anonymise des tickets resolus | Schedule : tous les 2 jours a minuit |
 
-Tous les workflows utilisent Google Vertex AI pour le traitement du langage naturel et s'intègrent avec l'API Zendesk.
-
-
-## 📊 Schéma de flux global
+## Flux global
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    ZENDESK (Source)                         │
-└────────┬────────────────────────────────┬──────────────────┘
-         │                                │
-         │ Nouveau ticket                 │ Ticket résolu
-         │                                │
-    ┌────▼─────────┐              ┌───────▼──────────┐
-    │ Motif        │              │ Archivage        │
-    │ Contact      │              │ Anonymisé        │
-    │ (horaire)    │              │ (hebdo)          │
-    └────┬─────────┘              └───────┬──────────┘
-         │                                │
-         │ + Catégorie                    │
-         │                                ▼
-    ┌────▼─────────┐              ┌──────────────────┐
-    │ Réponse      │              │ Google Cloud     │
-    │ Auto         │              │ Storage          │
-    │ (horaire)    │              │ (tickets_clos)   │
-    └────┬─────────┘              └──────────────────┘
-         │                                
-         │ + Note interne                 
-         │                                
-    ┌────▼─────────────────────────────────────┐
-    │          Agent humain                    │
-    │  (Valide/Modifie avant envoi)            │
-    └──────────────────────────────────────────┘
+Zendesk (nouveaux tickets)
+    |
+    v
+[Get_Motif_Contact]  (toutes les 10 min, horaires bureau)
+    |
+    ├─ Classifie le ticket (champ "Motif de contact")
+    |
+    └─ Appelle [Automatic_Response]  (sous-workflow)
+         |
+         ├─ Recherche dans Documentation + Tickets resolus (RAG)
+         ├─ Agent Analyste --> Agent Redacteur
+         └─ Ajoute une note interne au ticket
+              |
+              v
+         Agent humain valide/modifie avant envoi
+              |
+              v
+         Ticket resolu
+              |
+              v
+[Store_solved_tickets]  (tous les 2 jours)
+    |
+    ├─ Anonymisation RGPD (Agent DPO)
+    ├─ Stockage dans Google Cloud Storage (bucket tickets_clos)
+    ├─ Import dans le corpus RAG Vertex
+    └─ Tag "saved_ticket" pour eviter les doublons
 ```
 
----
+## Stack technique
 
-## 🔑 Points clés d'intégration
+| Composant | Usage |
+|-----------|-------|
+| **n8n** | Orchestration des workflows |
+| **Google Vertex AI (Gemini)** | Agents LLM (classification, analyse, redaction, anonymisation) |
+| **Google Vertex RAG Store** | Recherche vectorielle dans documentation et tickets resolus |
+| **Google Cloud Storage** | Stockage des tickets anonymises (bucket `tickets_clos`) |
+| **Zendesk API** | Lecture/ecriture des tickets et champs personnalises |
 
-### Credentials nécessaires
-- **Zendesk API** : Authentification pour lecture/écriture tickets
-- **Google Service Account** : Accès Vertex AI et Cloud Storage
-- **Google OAuth2** : Pour l'API Google Cloud Storage
+## Credentials necessaires dans n8n
 
-### Endpoints utilisés
+| Credential | Type | Usage |
+|------------|------|-------|
+| Zendesk API | API Token | Lecture/ecriture tickets, champs, commentaires |
+| Google Service Account | Service Account | Vertex AI (Gemini) pour les agents LLM |
+| Google OAuth2 | OAuth2 | Cloud Storage + RAG Store |
 
-**Zendesk :**
-- `GET /api/v2/tickets.json?query=...` : Recherche de tickets
-- `PATCH /api/v2/tickets/{id}.json` : Mise à jour de ticket
-- `GET /api/v2/tickets/{id}/comments` : Récupération des commentaires
-- `GET /api/v2/ticket_fields.json` : Liste des champs personnalisés
+Toutes les credentials sont stockees de maniere securisee dans n8n. Aucune cle n'est hardcodee dans les workflows.
 
-**Google Cloud :**
-- Vertex AI RAG Store (région : europe-west9)
-- Cloud Storage bucket : `tickets_clos`
+## Ressources Google Cloud
 
-### Variables d'environnement
-Les workflows n8n utilisent des credentials stockés de manière sécurisée dans n8n. Aucune clé n'est hardcodée.
+| Ressource | Valeur |
+|-----------|--------|
+| Projet | `gen-lang-client-0462375962` |
+| Region | `europe-west9` |
+| Corpus RAG Documentation | `2305843009213693952` |
+| Corpus RAG Solved Tickets | `5685794529555251200` |
+| Bucket GCS | `tickets_clos` |
 
----
+## Champs personnalises Zendesk
 
-## 🚀 Déploiement et maintenance
+| Champ | ID | Usage |
+|-------|----|-------|
+| Motif de contact interne | `42153295723665` | Categorie du ticket (rempli par Get_Motif_Contact) |
+| Sujet (BAQ) | `43473213212177` | Sujet des messages natifs (native_messaging) |
+| Description (BAQ) | `42767615870481` | Description des messages natifs (native_messaging) |
 
-### Fréquences d'exécution
-- **Automatic_Response** : Toutes les heures
-- **Get_Motif_Contact** : Toutes les heures
-- **Store_solved_tickets** : Hebdomadaire
+## Endpoints Zendesk utilises
 
-### Monitoring recommandé
-- Taux de succès de classification (Get_Motif_Contact)
-- Score de confiance moyen des catégorisations
-- Nombre de réponses automatiques utilisées par les agents
-- Volume de tickets archivés chaque semaine
+| Methode | Endpoint | Workflow |
+|---------|----------|----------|
+| `GET` | `/api/v2/ticket_fields.json` | Get_Motif_Contact, Store_solved_tickets |
+| `GET` | `/api/v2/tickets.json?query=...` | Get_Motif_Contact, Store_solved_tickets |
+| `GET` | `/api/v2/tickets/{id}.json` | Automatic_Response |
+| `GET` | `/api/v2/tickets/{id}/comments` | Store_solved_tickets |
+| `PATCH` | `/api/v2/tickets/{id}.json` | Get_Motif_Contact, Store_solved_tickets |
+| `PUT` | `/api/v2/tickets/{id}.json` | Automatic_Response (note interne) |
 
+## Prompts LLM
 
----
+Les prompts des agents sont documentes dans le dossier `prompts/` :
+
+| Fichier | Agent | Workflow |
+|---------|-------|----------|
+| `Auto_reponse_Analyste.md` | Analyste technique | Automatic_Response |
+| `Auto_reponse_Redacteur.md` | Redacteur senior | Automatic_Response |
+| `GetMotifContact_TicketAnalyst.md` | Classificateur de tickets | Get_Motif_Contact |
+| `SolvedTicket_RGPD_Agent.md` | DPO / Anonymiseur RGPD | Store_solved_tickets |
+
+## Monitoring recommande
+
+| Indicateur | Source |
+|------------|--------|
+| Taux de succes de classification | Logs Get_Motif_Contact |
+| Score de confiance moyen | Champ `confidence_score` des reponses LLM |
+| Nombre de reponses auto utilisees par les agents | Zendesk (notes internes) |
+| Volume de tickets archives | Bucket GCS `tickets_clos` |
+| Erreurs d'execution | Dashboard n8n |
